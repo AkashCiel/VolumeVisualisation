@@ -75,8 +75,8 @@ public class Volume {
         return t6; 
     }
 
-
-    float a = -0.75f; // global variable that defines the value of a used in cubic interpolation.
+    //
+    float a = -1f; // global variable that defines the value of a used in cubic interpolation.
     // you need to chose the right value
         
     //////////////////////////////////////////////////////////////////////
@@ -84,13 +84,19 @@ public class Volume {
     ////////////////////////////////////////////////////////////////////// 
         
     // Function that computes the weights for one of the 4 samples involved in the 1D interpolation 
-    public float weight (float x, Boolean one_two_sample)
-    {
-         float result=1.0f;
+    public float weight (float x, Boolean one_two_sample) {
          
-         // to be implemented
-       
-         return (float)result; 
+        float result;
+        
+        if(x <= 1) {
+            result = (float)((a + 2) * Math.pow(x, 3) - (a + 3) * Math.pow(x, 2) + 1);
+        } else if (x <= 2 ){
+            result = (float)(a * Math.pow(x, 3) - 5 * a * Math.pow(x, 2) + 8 * a * x - 4 * a);
+        } else {
+            result = 0;
+        }
+        
+        return result; 
    }
     
     //////////////////////////////////////////////////////////////////////
@@ -102,10 +108,15 @@ public class Volume {
     
     public float cubicinterpolate(float g0, float g1, float g2, float g3, float factor) {
        
-        // to be implemented              
+        float result = 0;
+        float[] points = {g0, g1, g2, g3};
         
-        float result = 1.0f;
-                            
+        // the result is the sum of the 4 values, weighted by their distance to the point.
+        for (int i = 0; i < points.length; i++) {
+            float distance = Math.abs(factor + 1 - i);
+            result += points[i] * weight(distance, false);
+        }          
+                 
         return result; 
     }
         
@@ -114,14 +125,30 @@ public class Volume {
     ////////////////////////////////////////////////////////////////////// 
     // 2D cubic interpolation implemented here. We do it for plane XY. Coord contains the position.
     // We assume the out of bounce checks have been done earlier
-    public float bicubicinterpolateXY(double[] coord,int z) {
-            
-        // to be implemented              
+    public float bicubicinterpolateXY(double[] coord, int z) {
         
-        float result = 1.0f;
+        int x = (int) Math.floor(coord[0]); 
+        int y = (int) Math.floor(coord[1]);
+        
+        float fac_x = (float) coord[0] - x;
+        float fac_y = (float) coord[1] - y;
+        
+        // Interpolate over x.
+        // One row lower on the y-axis.
+        float x0 = cubicinterpolate(getVoxel(x - 1, y - 1, z), getVoxel(x, y - 1, z), 
+                                    getVoxel(x + 1, y - 1, z), getVoxel(x + 2, y - 1, z), fac_x);
+        // On the same y-axis row.
+        float x1 = cubicinterpolate(getVoxel(x - 1, y, z), getVoxel(x, y, z), 
+                                    getVoxel(x + 1, y, z), getVoxel(x + 2, y, z), fac_x);
+        // One row higher on the y-axis.
+        float x2 = cubicinterpolate(getVoxel(x - 1, y + 1, z), getVoxel(x, y + 1, z), 
+                                    getVoxel(x + 1, y + 1, z), getVoxel(x + 2, y + 1, z), fac_x);
+        // Two rows higher on the y-axis.
+        float x3 = cubicinterpolate(getVoxel(x - 1, y + 2, z), getVoxel(x, y + 2, z), 
+                                    getVoxel(x + 1, y + 2, z), getVoxel(x + 2, y + 2, z), fac_x);
                             
-        return result; 
-
+        // Interpolate over y.
+        return cubicinterpolate(x0, x1, x2, x3, fac_y);
     }
             
     //////////////////////////////////////////////////////////////////////
@@ -135,13 +162,21 @@ public class Volume {
             return 0;
         }
        
-
-        // to be implemented              
-        float result = 1.0f;
-                            
-        return result; 
+        int z = (int) Math.floor(coord[2]);
+        float fac_z = (float) coord[2] - z;
         
+        // Interpolate over xy.
+        float xy0 = bicubicinterpolateXY(coord, z - 1);
+        float xy1 = bicubicinterpolateXY(coord, z);
+        float xy2 = bicubicinterpolateXY(coord, z + 1);
+        float xy3 = bicubicinterpolateXY(coord, z + 2);
 
+        // Interpolate over z.
+        float result =  cubicinterpolate(xy0, xy1, xy2, xy3, fac_z);
+        
+        if (result < 0) result = 0;
+        
+        return result;
     }
 
 

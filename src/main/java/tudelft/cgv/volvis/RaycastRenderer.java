@@ -132,10 +132,10 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
                 //val = volume.getVoxelNN(pixelCoord);
                 
                 //you have also the function getVoxelLinearInterpolated in Volume.java          
-                val = (int) volume.getVoxelLinearInterpolate(pixelCoord);
+                //val = (int) volume.getVoxelLinearInterpolate(pixelCoord);
                 
                 //you have to implement this function below to get the cubic interpolation
-                //val = (int) volume.getVoxelTriCubicInterpolate(pixelCoord);
+                val = (int) volume.getVoxelTriCubicInterpolate(pixelCoord);
                 
                 
                 // Map the intensity to a grey value by linear scaling
