@@ -132,10 +132,10 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
                 //val = volume.getVoxelNN(pixelCoord);
                 
                 //you have also the function getVoxelLinearInterpolated in Volume.java          
-                //val = (int) volume.getVoxelLinearInterpolate(pixelCoord);
+                val = (int) volume.getVoxelLinearInterpolate(pixelCoord);
                 
                 //you have to implement this function below to get the cubic interpolation
-                val = (int) volume.getVoxelTriCubicInterpolate(pixelCoord);
+                //val = (int) volume.getVoxelTriCubicInterpolate(pixelCoord);
                 
                 
                 // Map the intensity to a grey value by linear scaling
@@ -269,43 +269,95 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         // another light vector would be possible 
         VectorMath.setVector(lightVector, rayVector[0], rayVector[1], rayVector[2]);
         
+        // Compute the number of times we need to sample
+        int nrSamples = 1 + (int) Math.floor(VectorMath.distance(entryPoint, exitPoint) / sampleStep);
+        
+        //the current position is initialized as the entry point
+        double[] currentPos = new double[3];
+        VectorMath.setVector(currentPos, entryPoint[0], entryPoint[1], entryPoint[2]);
+        
         //Initialization of the colors as floating point values
         double r, g, b;
         r = g = b = 0.0;
-        double alpha = 0.0;
+        double alpha = 0.0; // alpha is opacity here
         double opacity = 0;
         
-        
-        TFColor voxel_color = new TFColor();
-        TFColor colorAux = new TFColor();
-        
-        // To be Implemented this function right now just gives back a constant color depending on the mode
-        
+        TFColor voxelColor = new TFColor();
+ 
         if (compositingMode) {
             // 1D transfer function 
-            voxel_color.r = 1;voxel_color.g =0;voxel_color.b =0;voxel_color.a =1;
-            opacity = 1;
+            TFColor compositeColor = getCompositeColor(currentPos, lightVector, nrSamples, rayVector);
+            
+            // copy the results.
+            voxelColor.r = compositeColor.r;
+            voxelColor.g = compositeColor.g;
+            voxelColor.b = compositeColor.b;
+            
+            // only give opacity if it has some color.
+            if(voxelColor.r > 0 || voxelColor.g > 0 || voxelColor.b > 0) {
+                opacity = compositeColor.a;
+            }
         }    
         if (tf2dMode) {
              // 2D transfer function 
-            voxel_color.r = 0;voxel_color.g =1;voxel_color.b =0;voxel_color.a =1;
+            voxelColor.r = 0;voxelColor.g =1;voxelColor.b =0;voxelColor.a =1;
             opacity = 1;      
         }
         if (shadingMode) {
             // Shading mode on
-            voxel_color.r = 1;voxel_color.g =0;voxel_color.b =1;voxel_color.a =1;
+            voxelColor.r = 1;voxelColor.g =0;voxelColor.b =1;voxelColor.a =1;
             opacity = 1;     
         }
             
-        r = voxel_color.r ;
-        g = voxel_color.g ;
-        b = voxel_color.b;
+        r = voxelColor.r ;
+        g = voxelColor.g ;
+        b = voxelColor.b;
         alpha = opacity ;
             
         //computes the color
         int color = computeImageColor(r,g,b,alpha);
         return color;
     }
+    
+    // Get the composite color from raycasting front to back.
+    public TFColor getCompositeColor(double[] currentPos, double[] lightVector, int nrSamples, double[] rayVector){
+        
+        int value = (int) volume.getVoxelLinearInterpolate(currentPos);
+        TFColor currColor = this.tFunc.getColor(value);
+        TFColor previousColor = new TFColor();
+        TFColor newColor = new TFColor();
+
+        // set an opacity threshold when computation can stop.
+        double opacity_threshold = 0.99;
+        
+        // End the ray when opacity is too high (front-to-back).
+        // Get just this sample's color value * opacity.
+        if (nrSamples < 0 || currColor.a > opacity_threshold) {
+            currColor.r *= currColor.a;
+            currColor.g *= currColor.a;
+            currColor.b *= currColor.a;
+            return currColor;
+        } 
+        
+        // Go to the next position.
+        for (int i = 0; i < 3; i++) {
+            currentPos[i] += lightVector[i];
+        }
+        
+        nrSamples--;
+
+        // Get the accumulated color of the sample before.
+        previousColor = getCompositeColor(currentPos, lightVector, nrSamples, rayVector);
+        
+        // Update the color with behind sample's color.
+        // The amount of previous color that can shine through, is  this color's transparancy.
+        newColor.r = currColor.a * currColor.r + (1 - currColor.a) * previousColor.r;
+        newColor.g = currColor.a * currColor.g + (1 - currColor.a) * previousColor.g;
+        newColor.b = currColor.a * currColor.b + (1 - currColor.a) * previousColor.b;
+        
+        return newColor;
+    }
+            
     
     //////////////////////////////////////////////////////////////////////
     ///////////////// FUNCTION TO BE IMPLEMENTED /////////////////////////
