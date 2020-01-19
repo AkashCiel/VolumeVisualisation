@@ -132,7 +132,9 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
                 //val = volume.getVoxelNN(pixelCoord);
                 
                 //you have also the function getVoxelLinearInterpolated in Volume.java          
-                val = (int) volume.getVoxelLinearInterpolate(pixelCoord);
+                //val = (int) volume.getVoxelLinearInterpolate(pixelCoord);
+                // Implementing Nearest Neighbour for interpolation
+                val = (int) volume.getVoxelNN(pixelCoord);
                 
                 //you have to implement this function below to get the cubic interpolation
                 //val = (int) volume.getVoxelTriCubicInterpolate(pixelCoord);
@@ -147,10 +149,12 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
                 // pixelColor.a = val > 0 ? 1.0 : 0.0;   
                 
                 // Alternatively, apply the transfer function to obtain a color using the tFunc attribute
-                // colorAux= tFunc.getColor(val);
-                // pixelColor.r=colorAux.r;pixelColor.g=colorAux.g;pixelColor.b=colorAux.b;pixelColor.a=colorAux.a; 
-                // IMPORTANT: You can also simply use pixelColor = tFunc.getColor(val); However then you copy by reference and this means that if you change 
-                // pixelColor you will be actually changing the transfer function So BE CAREFUL when you do this kind of assignments
+                //colorAux= tFunc.getColor(val);
+                //pixelColor.r=colorAux.r;pixelColor.g=colorAux.g;pixelColor.b=colorAux.b;pixelColor.a=colorAux.a; 
+                // IMPORTANT: You can also simply use pixelColor = tFunc.getColor(val); 
+                // However then you copy by reference and this means that if you change 
+                // pixelColor you will be actually changing the transfer function So 
+                // BE CAREFUL when you do this kind of assignments
 
                 //BufferedImage/image/texture expects a pixel color packed as ARGB in an int
                 //use the function computeImageColor to convert your double color in the range 0-1 to the format need by the image
@@ -162,17 +166,19 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
     
 
     
-    //Do NOT modify this function
+    // Do NOT modify this function
     //
-    //Function that updates the "image" attribute using the MIP raycasting
-    //It returns the color assigned to a ray/pixel given it's starting point (entryPoint) and the direction of the ray(rayVector).
+    // Function that updates the "image" attribute using the MIP raycasting
+    // It returns the color assigned to a ray/pixel given it's starting point (entryPoint) 
+    // and the direction of the ray(rayVector).
     // exitPoint is the last point.
-    //ray must be sampled with a distance defined by the sampleStep
+    // ray must be sampled with a distance defined by the sampleStep
    
     int traceRayMIP(double[] entryPoint, double[] exitPoint, double[] rayVector, double sampleStep) {
     	//compute the increment and the number of samples
         double[] increments = new double[3];
-        VectorMath.setVector(increments, rayVector[0] * sampleStep, rayVector[1] * sampleStep, rayVector[2] * sampleStep);
+        VectorMath.setVector(increments, rayVector[0] * sampleStep, rayVector[1] * sampleStep, 
+                rayVector[2] * sampleStep);
         
         // Compute the number of times we need to sample
         double distance = VectorMath.distance(entryPoint, exitPoint);
@@ -222,20 +228,49 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         // another light vector would be possible
          VectorMath.setVector(lightVector, rayVector[0], rayVector[1], rayVector[2]);
        
-        // To be Implemented
-              
+        // Implementation
+        
+        // Compute distance between entry and exit
+        double totalDistance = VectorMath.distance(entryPoint, exitPoint);
+        
+        // Compute number of samples using distance and sample step length
+        int totalSamples = (int)Math.floor(totalDistance/sampleStep) + 1;
+        
+        // Start from the entry point
+        double [] currentPosition = new double [3];
+        VectorMath.setVector(currentPosition, entryPoint[0], entryPoint[1], entryPoint[2]);
+        
         //Initialization of the colors as floating point values
         double r, g, b;
         r = g = b = 0.0;
         double alpha = 0.0;
-        double opacity = 0;
         
-              
-        // To be Implemented this function right now just gives back a constant color
-        
+        // Now loop through all samples
+        do{
+            // Obtain the interpolation value at current position and compare it against iso_value
+            double currentValue = volume.getVoxelLinearInterpolate(currentPosition);
+            //double currentValue = volume.getVoxelTriCubicInterpolate(currentPosition);
+            // Obtain the gradient at this point
+            VoxelGradient currentGradient = gradients.getGradient(currentPosition);
+            
+            // Edit color values if currentValue is greater than iso_value
+            if (currentValue > iso_value)
+            {
+                TFColor newColor = computePhongShading(isoColor, currentGradient, lightVector, rayVector);
+                //TFColor newColor = isoColor;
+                r = newColor.r; g = newColor.g; b = newColor.b; alpha = 1.0;
+            }
+            // Increment position and decrement available samples
+            for (int i = 0; i < 3; i++) 
+            {
+               currentPosition[i] += lightVector[i];
+            }
+            totalSamples --;
+
+              }while (totalSamples > 0);        
         
          // isoColor contains the isosurface color from the interface
-         r = isoColor.r;g = isoColor.g;b =isoColor.b;alpha =1.0;
+         //r = isoColor.r;g = isoColor.g;b =isoColor.b;alpha =1.0;
         //computes the color
         int color = computeImageColor(r,g,b,alpha);
         return color;
@@ -314,10 +349,31 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
     public TFColor computePhongShading(TFColor voxel_color, VoxelGradient gradient, double[] lightVector,
             double[] rayVector) {
 
-        // To be implemented 
+        // Implementation
+        
+        // Define ambient, diffuse, and specular constants
+        double ka = 0.1;
+        double kd = 0.7;
+        double ks = 0.2;
+        double alpha = 100.0;
+        
+        // Compute magnitudes of light and ray vectors
+        float lightVectorMag = (float) Math.sqrt(lightVector[0]*lightVector[0] + lightVector[1]*lightVector[1] + lightVector[2]*lightVector[2]);
+        float rayVectorMag = (float) Math.sqrt(rayVector[0]*rayVector[0] + rayVector[1]*rayVector[1] + rayVector[2]*rayVector[2]);
+        
+        // Compute dot products
+        float dotGradientLight = (float) (gradient.x*lightVector[0] + gradient.y*lightVector[1] + gradient.z*lightVector[2]);
+        float dotGradientRay = (float) (gradient.x*rayVector[0] + gradient.y*rayVector[1] + gradient.z*rayVector[2]);
+        
+        // Calculate phi using gradient (normal) vector
+        double theta = Math.acos((dotGradientLight)/(gradient.mag*lightVectorMag));
+        double phiPlusTheta = Math.acos((dotGradientRay)/(gradient.mag*rayVectorMag));
+        double phi = phiPlusTheta - theta;
         
         TFColor color = new TFColor(0,0,0,1);
-        
+        color.r = (ka + kd*voxel_color.r*Math.cos(theta) + ks*Math.pow(Math.cos(phi), alpha));
+        color.g = (ka + kd*voxel_color.g*Math.cos(theta) + ks*Math.pow(Math.cos(phi), alpha));;
+        color.b = (ka + kd*voxel_color.b*Math.cos(theta) + ks*Math.pow(Math.cos(phi), alpha));;
         
         return color;
     }
