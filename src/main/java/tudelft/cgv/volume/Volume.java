@@ -55,7 +55,8 @@ public class Volume {
                 || coord[2] < 0 || coord[2] > (dimZ-2)) {
             return 0;
         }
-        /* notice that in this framework we assume that the distance between neighbouring voxels is 1 in all directions*/
+        /* notice that in this framework we assume that the distance between neighbouring voxels 
+        is 1 in all directions*/
         int x = (int) Math.floor(coord[0]); 
         int y = (int) Math.floor(coord[1]);
         int z = (int) Math.floor(coord[2]);

@@ -14,7 +14,7 @@ package tudelft.cgv.volume;
 public class VoxelGradient {
 
     // contais gradient x,y,z component and mag. the magnitude. 
-    // the magnitude avoids calculations during the rendering.
+    // the magnitude helps avoid calculations during the rendering.
     public float x, y, z;
     public float mag;
     
