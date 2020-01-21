@@ -28,10 +28,11 @@ public class GradientVolume {
 //If needed add new attributes here:
 
 
-    //Do NOT modify this function
+    // Do NOT modify this function
     // 
     // Computes the gradient of the volume attribute and save it into the data attribute
-    // This is a lengthy computation and is performed only once (have a look at the constructor GradientVolume) 
+    // This is a lengthy computation and is performed only once 
+    // (have a look at the constructor GradientVolume) 
     //
     private void compute() {
 
@@ -58,16 +59,21 @@ public class GradientVolume {
 ///////////////// FUNCTION TO BE IMPLEMENTED /////////////////////////
 //////////////////////////////////////////////////////////////////////
 //This function linearly interpolates gradient vector g0 and g1 given the factor (t) 
-//the resut is given at result. You can use it to tri-linearly interpolate the gradient 
+//the result is given at result. You can use it to tri-linearly interpolate the gradient 
     
 	public void interpolate(VoxelGradient g0, VoxelGradient g1, float factor, VoxelGradient result) {
             
-            // to be implemented
+            // Implementation
+            // Compute x, y, and z gradient components of result as weighted average
+            // of x, y, z gradient components of g0 and g1
+            // factor is the weight here
             
-        result.x = 1;
-        result.y = 1;
-        result.z = 1;
-        result.mag = (float) Math.sqrt(result.x * result.x + result.y * result.y + result.z * result.z);
+        result.x = (1 - factor)*g0.x + factor*g1.x;
+        result.y = (1 - factor)*g0.y + factor*g1.y;
+        result.z = (1 - factor)*g0.z + factor*g1.z;
+        
+        // Initialise a new gradient vector using the above components and return
+        result.mag = (float) Math.sqrt(result.x*result.x + result.y*result.y + result.z*result.z);
     }
 	
 //////////////////////////////////////////////////////////////////////
@@ -78,13 +84,43 @@ public class GradientVolume {
         
     public VoxelGradient getGradient(double[] coord) {
         
-        // to be implemented
-
-        return getGradientNN(coord);
-
+        // Implementation
+        // Return 0 if any of the coordinates is out of bounds
+        if (coord[0] < 0 || coord[0] > (dimX-2) || coord[1] < 0 || coord[1] > (dimY-2)
+                || coord[2] < 0 || coord[2] > (dimZ-2)) {
+            return zero;
+        }
+        // Obtain nearest preceeding voxel coordinates
+        int x = (int) Math.floor(coord[0]); 
+        int y = (int) Math.floor(coord[1]);
+        int z = (int) Math.floor(coord[2]);
+        
+        // Compute x, y, z factors for interpolation
+        float fac_x = (float) coord[0] - x;
+        float fac_y = (float) coord[1] - y;
+        float fac_z = (float) coord[2] - z;
+        
+        // Initialise all voxel gradients
+        VoxelGradient g0 = new VoxelGradient();
+        VoxelGradient g1 = new VoxelGradient();
+        VoxelGradient g2 = new VoxelGradient();
+        VoxelGradient g3 = new VoxelGradient();
+        VoxelGradient g4 = new VoxelGradient();
+        VoxelGradient g5 = new VoxelGradient();
+        VoxelGradient g6 = new VoxelGradient();
+        // Interpolate 4 vertex-pairs along x
+        interpolate(getGradient(x, y, z), getGradient(x+1, y, z), fac_x, g0);
+        interpolate(getGradient(x, y+1, z), getGradient(x+1, y+1, z), fac_x, g1);
+        interpolate(getGradient(x, y, z+1), getGradient(x+1, y, z+1), fac_x, g2);
+        interpolate(getGradient(x, y+1, z+1), getGradient(x+1, y+1, z+1), fac_x, g3);
+        // Interpolate 2 edge-pairs along y
+        interpolate(g0, g1, fac_y, g4);
+        interpolate(g2, g3, fac_y, g5);
+        // Interpolate 1 face-pair along z
+        interpolate(g4, g5, fac_z, g6);
+        
+        return g6;
     }
-    
-    
     
     //Do NOT modify this function
     public VoxelGradient getGradientNN(double[] coord) {
@@ -99,9 +135,10 @@ public class GradientVolume {
         return getGradient(x, y, z);
     }
     
-    //Returns the maximum gradient magnitude
-    //The data array contains all the gradients, in this function you have to return the maximum magnitude of the vectors in data[] 
-    //Do NOT modify this function
+    // Returns the maximum gradient magnitude
+    // The data array contains all the gradients, in this function you have to return 
+    // the maximum magnitude of the vectors in data[] 
+    // Do NOT modify this function
     private double calculateMaxGradientMagnitude() {
         if (maxmag >= 0) {
             return maxmag;
