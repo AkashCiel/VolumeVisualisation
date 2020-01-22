@@ -224,7 +224,7 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
    public int traceRayIso(double[] entryPoint, double[] exitPoint, double[] rayVector, double sampleStep) {
        
         double[] lightVector = new double[3];
-        //We define the light vector as directed toward the view point (which is the source of the light)
+        // We define the light vector as directed toward the view point (which is the source of the light)
         // another light vector would be possible
          VectorMath.setVector(lightVector, rayVector[0], rayVector[1], rayVector[2]);
        
@@ -246,7 +246,7 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         double alpha = 0.0;
         
         // Now loop through all samples
-        do{
+        do {
             // Obtain the interpolation value at current position and compare it against iso_value
             double currentValue = volume.getVoxelLinearInterpolate(currentPosition);
             //double currentValue = volume.getVoxelTriCubicInterpolate(currentPosition);
@@ -254,23 +254,23 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
             VoxelGradient currentGradient = gradients.getGradient(currentPosition);
             
             // Edit color values if currentValue is greater than iso_value
-            if (currentValue > iso_value)
-            {
+            if (currentValue > iso_value) {
                 TFColor newColor = computePhongShading(isoColor, currentGradient, lightVector, rayVector);
-                //TFColor newColor = isoColor;
-                r = newColor.r; g = newColor.g; b = newColor.b; alpha = 1.0;
+                r = newColor.r; 
+                g = newColor.g; 
+                b = newColor.b; 
+                alpha = 1.0;
             }
             // Increment position and decrement available samples
-            for (int i = 0; i < 3; i++) 
-            {
+            for (int i = 0; i < 3; i++) {
                currentPosition[i] += lightVector[i];
             }
             totalSamples --;
 
-              }while (totalSamples > 0);        
+        } while (totalSamples > 0);        
         
-         // isoColor contains the isosurface color from the interface
-         //r = isoColor.r;g = isoColor.g;b =isoColor.b;alpha =1.0;
+        // isoColor contains the isosurface color from the interface
+        //r = isoColor.r;g = isoColor.g;b =isoColor.b;alpha =1.0;
         //computes the color
         int color = computeImageColor(r,g,b,alpha);
         return color;
@@ -349,31 +349,49 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
     public TFColor computePhongShading(TFColor voxel_color, VoxelGradient gradient, double[] lightVector,
             double[] rayVector) {
 
-        // Implementation
-        
         // Define ambient, diffuse, and specular constants
         double ka = 0.1;
         double kd = 0.7;
         double ks = 0.2;
         double alpha = 100.0;
         
-        // Compute magnitudes of light and ray vectors
-        float lightVectorMag = (float) Math.sqrt(lightVector[0]*lightVector[0] + lightVector[1]*lightVector[1] + lightVector[2]*lightVector[2]);
-        float rayVectorMag = (float) Math.sqrt(rayVector[0]*rayVector[0] + rayVector[1]*rayVector[1] + rayVector[2]*rayVector[2]);
+        // Normalize the gradient vector.
+        if(gradient.mag == 0) // Prevent division by 0.
+            return voxel_color;
+        double[] normGradientVector = {gradient.x / gradient.mag, 
+            gradient.y / gradient.mag, gradient.z / gradient.mag};
         
-        // Compute dot products
-        float dotGradientLight = (float) (gradient.x*lightVector[0] + gradient.y*lightVector[1] + gradient.z*lightVector[2]);
-        float dotGradientRay = (float) (gradient.x*rayVector[0] + gradient.y*rayVector[1] + gradient.z*rayVector[2]);
+        // Normalize light vector.
+        double lightVectorMag = VectorMath.length(lightVector);
+        if (lightVectorMag == 0)
+            return voxel_color;
+        double[] normLightVector = {lightVector[0] / lightVectorMag, 
+            lightVector[1] / lightVectorMag, lightVector[2] / lightVectorMag};
         
-        // Calculate phi using gradient (normal) vector
-        double theta = Math.acos((dotGradientLight)/(gradient.mag*lightVectorMag));
-        double phiPlusTheta = Math.acos((dotGradientRay)/(gradient.mag*rayVectorMag));
-        double phi = phiPlusTheta - theta;
+        // Normalize rayvector        
+        double rayVectorMag = VectorMath.length(rayVector);
+        if (rayVectorMag == 0)
+            return voxel_color;
+        double[] normRayVector = {rayVector[0] / rayVectorMag, rayVector[1] / rayVectorMag, 
+                                  rayVector[2] / rayVectorMag};
+        
+        // Compute perfectly reflected vector
+        double dotGradientLight = VectorMath.dotproduct(normGradientVector, normLightVector);
+        double phi = 2 * dotGradientLight;
+        double shift[] = {normGradientVector[0] * phi, normGradientVector[1] * phi, 
+            normGradientVector[2] * phi};
+        double reflectionVector[] = {shift[0] - normLightVector[0], 
+            shift[1] - normLightVector[1], shift[2] - normLightVector[2]};
+        
+        double phi2 = VectorMath.dotproduct(normGradientVector,reflectionVector);
         
         TFColor color = new TFColor(0,0,0,1);
-        color.r = (ka + kd*voxel_color.r*Math.cos(theta) + ks*Math.pow(Math.cos(phi), alpha));
-        color.g = (ka + kd*voxel_color.g*Math.cos(theta) + ks*Math.pow(Math.cos(phi), alpha));;
-        color.b = (ka + kd*voxel_color.b*Math.cos(theta) + ks*Math.pow(Math.cos(phi), alpha));;
+        color.r = (ka * voxel_color.r + kd * dotGradientLight * phi * voxel_color.r + 
+                ks * Math.pow(phi2, alpha)) * voxel_color.r;
+        color.g = (ka * voxel_color.g + kd * dotGradientLight * phi * voxel_color.g + 
+                ks * Math.pow(phi2, alpha)) * voxel_color.g;
+        color.b = (ka * voxel_color.b + kd * dotGradientLight * phi * voxel_color.b + 
+                ks * Math.pow(phi2, alpha)) * voxel_color.b;
         
         return color;
     }

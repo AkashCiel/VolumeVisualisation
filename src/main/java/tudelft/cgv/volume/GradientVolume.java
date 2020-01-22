@@ -108,6 +108,7 @@ public class GradientVolume {
         VoxelGradient g4 = new VoxelGradient();
         VoxelGradient g5 = new VoxelGradient();
         VoxelGradient g6 = new VoxelGradient();
+        
         // Interpolate 4 vertex-pairs along x
         interpolate(getGradient(x, y, z), getGradient(x+1, y, z), fac_x, g0);
         interpolate(getGradient(x, y+1, z), getGradient(x+1, y+1, z), fac_x, g1);
