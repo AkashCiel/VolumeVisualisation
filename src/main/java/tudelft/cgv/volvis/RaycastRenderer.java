@@ -216,29 +216,74 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
     //ray must be sampled with a distance defined by the sampleStep
    
    public int traceRayIso(double[] entryPoint, double[] exitPoint, double[] rayVector, double sampleStep) {
-       
-        double[] lightVector = new double[3];
-        //We define the light vector as directed toward the view point (which is the source of the light)
-        // another light vector would be possible
-         VectorMath.setVector(lightVector, rayVector[0], rayVector[1], rayVector[2]);
-       
-        // To be Implemented
-              
-        //Initialization of the colors as floating point values
-        double r, g, b;
-        r = g = b = 0.0;
-        double alpha = 0.0;
-        double opacity = 0;
-        
-              
-        // To be Implemented this function right now just gives back a constant color
-        
-        
-         // isoColor contains the isosurface color from the interface
-         r = isoColor.r;g = isoColor.g;b =isoColor.b;alpha =1.0;
-        //computes the color
-        int color = computeImageColor(r,g,b,alpha);
-        return color;
+
+       double[] lightVector = new double[3];
+       //We define the light vector as directed toward the view point (which is the source of the light)
+       // another light vector would be possible
+       VectorMath.setVector(lightVector, rayVector[0], rayVector[1], rayVector[2]);
+
+       double[] increments = new double[3];
+       VectorMath.setVector(increments, rayVector[0] * sampleStep, rayVector[1] * sampleStep,
+               rayVector[2] * sampleStep);
+       // Implementation
+
+       // Compute distance between entry and exit
+       double totalDistance = VectorMath.distance(entryPoint, exitPoint);
+
+       // Compute number of samples using distance and sample step length
+       int totalSamples = (int)Math.floor(totalDistance/sampleStep) + 1;
+
+       // Start from the entry point
+       double [] currentPosition = new double [3];
+       VectorMath.setVector(currentPosition, entryPoint[0], entryPoint[1], entryPoint[2]);
+
+       //Initialization of the colors as floating point values
+       double r, g, b;
+       r = g = b = 0.0;
+       double alpha = 0.0;
+       TFColor voxelColor = new TFColor();
+       // Now loop through all samples
+       do{
+           // Obtain the interpolation value at current position and compare it against iso_value
+           double currentValue = volume.getVoxelLinearInterpolate(currentPosition);
+           //double currentValue = volume.getVoxelTriCubicInterpolate(currentPosition);
+           // Obtain the gradient at this point
+
+
+           // Edit color values if currentValue is greater than iso_value
+           if (currentValue > iso_value)
+           {
+
+               r = isoColor.r; g = isoColor.g; b = isoColor.b; alpha = 1.0;
+               break;
+           }
+           // Increment position and decrement available samples
+           for (int i = 0; i < 3; i++)
+           {
+               currentPosition[i] += increments[i];
+           }
+           totalSamples --;
+
+       }while (totalSamples > 0);
+
+       TFColor newColor;
+       if((r > 0 || g > 0 || b > 0) && alpha > 0) {
+           if (shadingMode) {
+               voxelColor = new TFColor(r,g,b,alpha);
+               newColor = computePhongShading(voxelColor, gradients.getGradient(currentPosition), lightVector, rayVector);
+               r=newColor.r;
+               g=newColor.g;
+               b=newColor.b;
+               alpha = 1;
+
+           }
+       }
+
+       // isoColor contains the isosurface color from the interface
+       //r = isoColor.r;g = isoColor.g;b =isoColor.b;alpha =1.0;
+       //computes the color
+       int color = computeImageColor(r,g,b,alpha);
+       return color;
     }
    
     //////////////////////////////////////////////////////////////////////
@@ -366,11 +411,67 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
     public TFColor computePhongShading(TFColor voxel_color, VoxelGradient gradient, double[] lightVector,
             double[] rayVector) {
 
-        // To be implemented 
-        
-        TFColor color = new TFColor(0,0,0,1);
-        
-        
+        // Implementation
+        // Define ambient, diffuse, and specular constants
+        double ka = 0.1;
+        double kd = 0.7;
+        double ks = 0.2;
+        double alpha = 100.0;
+
+        double gradientNorm[] = new double[3];
+        // Normalise Gradient Vector
+//        if (gradient.mag == 0){return voxel_color;}
+//        double[] gradientNorm = {gradient.x/gradient.mag, gradient.y/gradient.mag, gradient.z/gradient.mag};
+        if (gradient.mag != 0){
+            VectorMath.setVector(gradientNorm, gradient.x/gradient.mag, gradient.y/gradient.mag, gradient.z/gradient.mag);
+        }else{
+            //VectorMath.setVector(gradientNorm, gradient.x, gradient.y, gradient.z);
+            return voxel_color;
+        }
+
+
+        // Calculate cos theta using gradient (normal) vector
+        double cosTheta = VectorMath.dotproduct(lightVector, gradientNorm);
+
+        // Calculate cos phi
+        // Scale up light vector by twice the scalar alpha
+        double n_dot_L = VectorMath.dotproduct(gradientNorm, lightVector);
+
+        double [] scaledNormalVec = {2*n_dot_L*gradientNorm[0], 2*n_dot_L*gradientNorm[1], 2*n_dot_L*gradientNorm[2]};
+
+        double [] vectorSubstraction = {scaledNormalVec[0]-lightVector[0], scaledNormalVec[1]-lightVector[1],
+                scaledNormalVec[2]-lightVector[2]};
+        // Dot product of resultant and ray vector gives cos phi
+        double cosPhi = VectorMath.dotproduct(rayVector, vectorSubstraction);
+
+        double ciAmbient[] = new double[3];
+        VectorMath.setVector(ciAmbient, voxel_color.r,voxel_color.g,voxel_color.b);
+
+        double ciDiffused[] = new double[3];
+        VectorMath.setVector(ciDiffused, voxel_color.r,voxel_color.g,voxel_color.b);
+
+        double ciSpecular[] = new double[3];
+        VectorMath.setVector(ciSpecular, 1.0,1.0,1.0);
+
+        double ambientColor[] = new double[3];
+        double diffuseColor[] = new double[3];
+        double specularColor[] = new double[3];
+
+        for(int i= 0;i<3;i++){ambientColor[i] = Math.max(0,ka*ciAmbient[i]);}
+        for(int i= 0;i<3;i++){diffuseColor[i] = Math.max(0,kd*cosTheta*ciDiffused[i]);}
+        for(int i= 0;i<3;i++){specularColor[i] = Math.max(0,ks*Math.pow(cosPhi, alpha)*ciSpecular[i]);}
+
+        double r = ambientColor[0] + diffuseColor[0] + specularColor[0];
+        if (r < 0.0) {r = 0.0;}
+        if (r > 1.0) {r = 1.0;}
+        double g = ambientColor[1] + diffuseColor[1] + specularColor[1];
+        if (g < 0.0) {g = 0.0;}
+        if (g > 1.0) {g = 1.0;}
+        double b = ambientColor[2] + diffuseColor[2] + specularColor[2];
+        if (b < 0.0) {b = 0.0;}
+        if (b > 1.0) {b = 1.0;}
+
+        TFColor color = new TFColor(r,g,b,voxel_color.a);
         return color;
     }
     
@@ -938,6 +1039,5 @@ public double computeOpacity2DTF(double material_value, double material_r,
             listeners.get(i).changed();
         }
     }
-    
 
 }
