@@ -342,11 +342,26 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
             if(voxelColor.r > 0 || voxelColor.g > 0 || voxelColor.b > 0) {
                 opacity = compositeColor.a;
             }
+
         }    
         if (tf2dMode) {
-             // 2D transfer function 
-            voxelColor.r = 0;voxelColor.g =1;voxelColor.b =0;voxelColor.a =1;
-            opacity = 1;      
+            // 2D transfer function
+            //voxelColor.r = 0;voxelColor.g =1;voxelColor.b =0;voxelColor.a =1;
+            TFColor compositeColor = getCompositeColor(currentPos, lightVector, nrSamples, rayVector);
+            // 2D transfer function
+            voxelColor.r = compositeColor.r;
+            voxelColor.g = compositeColor.g;
+            voxelColor.b = compositeColor.b;
+
+            //emitted color
+            double value = volume.getVoxelLinearInterpolate(currentPos);
+            double mag = gradients.getGradient(currentPos).mag;
+            double radius = tFunc2D.radius;
+            //if (compositeColor.r > 0 || compositeColor.g > 0 || compositeColor.b > 0) {
+                opacity = computeOpacity2DTF(tFunc2D.baseIntensity, tFunc2D.radius, value, mag)*compositeColor.a;
+           // }
+          /*  if(opacity!=0)
+                System.out.println("Opacity in TF2D:"+opacity+" "+ compositeColor.a);*/
         }
         if (shadingMode) {
             // Shading mode on
@@ -578,10 +593,24 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
 public double computeOpacity2DTF(double material_value, double material_r,
         double voxelValue, double gradMagnitude) {
 
+    //init opacity with 0
     double opacity = 0.0;
 
-    // to be implemented
-    
+    //angle of the widget
+    double angle = Math.atan(material_r/this.gradients.getMaxGradientMagnitude());
+
+    //angle of current voxel with respect to base intensity center
+    double voxelRad = Math.abs(voxelValue-material_value);
+    double voxelGradMag = gradMagnitude;
+    double voxelAngle = Math.atan(voxelRad/voxelGradMag);
+
+    //if the voxel is inside the widget, give it an opacity
+    if(voxelAngle < angle){
+        //the factor between the angles is used as a ramp
+        opacity = (1 - (voxelAngle/angle));
+        System.out.println("Inside widget");
+    }
+    //System.out.println(voxelAngle+ " "+angle);
     return opacity;
 }  
 
