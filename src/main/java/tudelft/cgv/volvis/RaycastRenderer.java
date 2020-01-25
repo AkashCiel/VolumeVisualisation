@@ -55,7 +55,7 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
     // This is a work around
     private float res_factor = 1.0f;
     private float max_res_factor=0.25f;
-    private TFColor isoColor; 
+    private TFColor isoColor;
 
     
     //////////////////////////////////////////////////////////////////////
@@ -624,8 +624,10 @@ public double computeOpacity2DTF(double material_value, double material_r,
     //init opacity with 0
     double opacity = 0.0;
 
+    //maximum magnitude
+    double maxmag = this.gradients.getMaxGradientMagnitude();
     //angle of the widget
-    double angle = Math.atan(material_r/this.gradients.getMaxGradientMagnitude());
+    double angle = Math.atan(material_r/maxmag);
 
     //angle of current voxel with respect to base intensity center
     double voxelRad = Math.abs(voxelValue-material_value);
@@ -633,8 +635,8 @@ public double computeOpacity2DTF(double material_value, double material_r,
 
     //if the voxel is inside the widget, give it an opacity
     if(voxelAngle < angle){
-        //the factor between the angles is used as a ramp
-        opacity = (1 - (voxelAngle/angle))*tFunc2D.color.a;
+        //the factor between the voxel gradient magnitude and maximum magnitude is used as a ramp
+        opacity = (1-(gradMagnitude/maxmag))*tFunc2D.color.a;
     }
     return opacity;
 }  
