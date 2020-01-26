@@ -344,28 +344,7 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
             }
 
         }    
-        /*if (tf2dMode) {
-            // 2D transfer function
-            //voxelColor.r = 0;voxelColor.g =1;voxelColor.b =0;voxelColor.a =1;
-           /* TFColor compositeColor = getCompositeColor(currentPos, lightVector, nrSamples, rayVector);
-            // 2D transfer function
-            voxelColor.r = tFunc2D.color.r;
-            voxelColor.g = tFunc2D.color.g;
-            voxelColor.b = tFunc2D.color.b;
 
-            //emitted color
-            double value = volume.getVoxelLinearInterpolate(currentPos);
-            double mag = gradients.getGradient(currentPos).mag;
-            if(value!= 0 || mag!=0)
-                System.out.println("Yayyyy!");
-            double radius = tFunc2D.radius;
-            //if (compositeColor.r > 0 || compositeColor.g > 0 || compositeColor.b > 0) {
-                opacity = computeOpacity2DTF(tFunc2D.baseIntensity, tFunc2D.radius, value, mag)*compositeColor.a;
-           // }
-            /*if(opacity!=0)
-
-                System.out.println("Opacity in TF2D:"+opacity+" "+ compositeColor.a);
-        }*/
         if (shadingMode) {
             // Shading mode on
             voxelColor.r = 1;voxelColor.g =0;voxelColor.b =1;voxelColor.a =1;
@@ -632,11 +611,12 @@ public double computeOpacity2DTF(double material_value, double material_r,
     //angle of current voxel with respect to base intensity center
     double voxelRad = Math.abs(voxelValue-material_value);
     double voxelAngle = Math.atan(voxelRad/gradMagnitude);
+    double voxelBaseRadius = (gradMagnitude/maxmag)*material_r*0.5;
 
     //if the voxel is inside the widget, give it an opacity
     if(voxelAngle < angle){
-        //the factor between the voxel gradient magnitude and maximum magnitude is used as a ramp
-        opacity = (1-(gradMagnitude/maxmag))*tFunc2D.color.a;
+        //the factor between the voxel radius and the total distance of the horizontal line to the diagonal along the voxel is used as a ramp
+        opacity = ((voxelRad/voxelBaseRadius))*tFunc2D.color.a;
     }
     return opacity;
 }  
