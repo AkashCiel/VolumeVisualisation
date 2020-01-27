@@ -328,27 +328,26 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         double opacity = 0;
         
         TFColor voxelColor = new TFColor();
- 
-        if (compositingMode || tf2dMode) {
-            // 1D transfer function 
-            TFColor compositeColor = getCompositeColor(currentPos, lightVector, nrSamples, rayVector);
-            
-            // copy the results.
-            voxelColor.r = compositeColor.r;
-            voxelColor.g = compositeColor.g;
-            voxelColor.b = compositeColor.b;
-            
-            // only give opacity if it has some color.
-            if(voxelColor.r > 0 || voxelColor.g > 0 || voxelColor.b > 0) {
-                opacity = compositeColor.a;
-            }
-
+        TFColor compositeColor = new TFColor();;
+        
+        // 1D transfer function 
+        if (compositingMode) {
+            compositeColor = getCompositeColor(currentPos, lightVector, nrSamples, rayVector);
         }    
 
-        if (shadingMode) {
-            // Shading mode on
-            voxelColor.r = 1;voxelColor.g =0;voxelColor.b =1;voxelColor.a =1;
-            opacity = 1;     
+        // 2D transfer function
+        if (tf2dMode) {
+            compositeColor = getCompositeColor2D(currentPos, lightVector, nrSamples, rayVector);
+        }
+        
+        // copy the results.
+        voxelColor.r = compositeColor.r;
+        voxelColor.g = compositeColor.g;
+        voxelColor.b = compositeColor.b;
+
+        // only give opacity if it has some color.
+        if(voxelColor.r > 0 || voxelColor.g > 0 || voxelColor.b > 0) {
+            opacity = compositeColor.a;
         }
             
         r = voxelColor.r ;
@@ -364,67 +363,87 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
     // Get the composite color from raycasting front to back.
     public TFColor getCompositeColor(double[] currentPos, double[] lightVector, int nrSamples, double[] rayVector){
 
-        //voxelValue and gradient magnitude for 2D transfer function
         int value = (int) volume.getVoxelLinearInterpolate(currentPos);
-        double mag = gradients.getGradient(currentPos).mag;
-
-        TFColor currColor;
-        double currentOpacity;
-
-        //If 2D transfer function, then use color from tFund2D widget and opacity from computeOpacity2D
-        // Else, use color from tFunc widget.
-        if(tf2dMode) {
-            currColor = this.tFunc2D.color;
-            currentOpacity = this.computeOpacity2DTF(tFunc2D.baseIntensity, tFunc2D.radius, value, mag)*currColor.a;
-        }
-        else {
-            currColor = this.tFunc.getColor(value);
-            currentOpacity = currColor.a;
-        }
-        TFColor previousColor = new TFColor();
-        TFColor newColor = new TFColor();
-
+        
+        // Use color from tFunc widget.
+        TFColor currColor = this.tFunc.getColor(value);
+        double currentOpacity = currColor.a;
+        
         // set an opacity threshold when computation can stop.
         double opacity_threshold = 0.99;
         
-        // End the ray when opacity is too high (front-to-back).
+        // End the ray when opacity is too high.
         // Get just this sample's color value * opacity.
-        if(tf2dMode) {
-            if (nrSamples < 0) {
-                return new TFColor(0,0,0,0);
-            }
+        if (nrSamples < 0 || currentOpacity > opacity_threshold) {
+            currColor.r *= currentOpacity;
+            currColor.g *= currentOpacity;
+            currColor.b *= currentOpacity;
+            return currColor;
         }
-        else {
-            if (nrSamples < 0 || currentOpacity > opacity_threshold) {
-                currColor.r *= currentOpacity;
-                currColor.g *= currentOpacity;
-                currColor.b *= currentOpacity;
-                return currColor;
-            }
+        
+        if(shadingMode) {
+            currColor = computePhongShading(currColor, this.gradients.getGradient(currentPos), lightVector, rayVector);
         }
         
         // Go to the next position.
         for (int i = 0; i < 3; i++) {
             currentPos[i] += lightVector[i];
         }
-        
         nrSamples--;
 
         // Get the accumulated color of the sample before.
-        previousColor = getCompositeColor(currentPos, lightVector, nrSamples, rayVector);
+        TFColor previousColor = getCompositeColor(currentPos, lightVector, nrSamples, rayVector);
         
         // Update the color with behind sample's color.
         // The amount of previous color that can shine through, is  this color's transparancy.
+        TFColor newColor = new TFColor();
         newColor.r = currentOpacity * currColor.r + (1 - currentOpacity) * previousColor.r;
         newColor.g = currentOpacity * currColor.g + (1 - currentOpacity) * previousColor.g;
         newColor.b = currentOpacity * currColor.b + (1 - currentOpacity) * previousColor.b;
-        //For 2D transfer function, compute accumulated opacity using formula
-        if(tf2dMode)
-            newColor.a = currentOpacity + (1-currentOpacity)*previousColor.a;
+        newColor.a = currentOpacity + (1 - currentOpacity) * previousColor.a;
         
         return newColor;
     }
             
+    public TFColor getCompositeColor2D(double[] currentPos, double[] lightVector, int nrSamples, double[] rayVector){
+        
+        if (nrSamples < 0) {
+            return new TFColor(0,0,0,0);
+        }
+        
+        // Voxel value and gradient magnitude for 2D transfer function
+        int value = (int) volume.getVoxelLinearInterpolate(currentPos);
+        double mag = gradients.getGradient(currentPos).mag;
+
+        // Go to the next position.
+        for (int i = 0; i < 3; i++) {
+            currentPos[i] += lightVector[i];
+        }
+        nrSamples--;
+        
+        // Use color from tFund2D widget and opacity from computeOpacity2D
+        TFColor currColor = this.tFunc2D.color;
+        double currentOpacity = this.computeOpacity2DTF(tFunc2D.baseIntensity, tFunc2D.radius, value, mag)*currColor.a;
+        // Get the accumulated color of the sample before.
+        TFColor previousColor = getCompositeColor2D(currentPos, lightVector, nrSamples, rayVector);
+           
+        // Add shading if necessary
+        if (shadingMode) {
+            currColor = computePhongShading(currColor, gradients.getGradient(currentPos), lightVector, rayVector);
+        }
+        
+        // Update the color with behind sample's color.
+        // The amount of previous color that can shine through, is  this color's transparancy.
+        TFColor newColor = new TFColor(0,0,0,0);
+        newColor.r = currentOpacity * currColor.r + (1 - currentOpacity) * previousColor.r;
+        newColor.g = currentOpacity * currColor.g + (1 - currentOpacity) * previousColor.g;
+        newColor.b = currentOpacity * currColor.b + (1 - currentOpacity) * previousColor.b;
+        // Compute accumulated opacity using formula
+        newColor.a = currentOpacity + (1 - currentOpacity) * previousColor.a;
+        
+        return newColor;
+        
+    }
     
     //////////////////////////////////////////////////////////////////////
     ///////////////// FUNCTION TO BE IMPLEMENTED /////////////////////////
@@ -611,12 +630,14 @@ public double computeOpacity2DTF(double material_value, double material_r,
     //angle of current voxel with respect to base intensity center
     double voxelRad = Math.abs(voxelValue-material_value);
     double voxelAngle = Math.atan(voxelRad/gradMagnitude);
-    double voxelBaseRadius = (gradMagnitude/maxmag)*material_r*0.5;
+    
+    //double voxelBaseRadius = (gradMagnitude/maxmag)*material_r*0.5;
 
     //if the voxel is inside the widget, give it an opacity
     if(voxelAngle < angle){
         //the factor between the voxel radius and the total distance of the horizontal line to the diagonal along the voxel is used as a ramp
-        opacity = ((voxelRad/voxelBaseRadius))*tFunc2D.color.a;
+        // opacity = ((voxelRad/voxelBaseRadius))*tFunc2D.color.a;
+        opacity = tFunc2D.color.a; 
     }
     return opacity;
 }  
