@@ -294,10 +294,43 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
     // Given the current sample position, increment vector of the sample (vector from previous sample to current sample) and sample Step. 
    // Previous sample value and current sample value, isovalue value
     // The function should search for a position where the iso_value passes that it is more precise.
-   public void  bisection_accuracy (double[] currentPos, double[] increments,double sampleStep, float previousvalue,float value, float iso_value)
+   public double[]  bisection_accuracy (double[] currentPos, double[] increments,double sampleStep, float previousvalue,float value, float iso_value)
    {
+       //Middle value for each iteration
+       float midValue;
 
-           // to be implemented
+       //Flag to check if the value has been found
+       boolean found = false;
+
+       //Convergence value as a check to end iterating
+       double convergence = 0;
+
+       //previous position
+       double[] previousPos = {currentPos[0] - increments[0], currentPos[1] - increments[1], currentPos[2] - increments[2]};
+
+       do {
+           //calculate the mid value and position between previous and current position
+           double[] midPos = {(currentPos[0] + previousPos[0]) / 2, (currentPos[1] + previousPos[1]) / 2, (currentPos[2] + previousPos[2]) / 2};
+           midValue = volume.getVoxelLinearInterpolate(midPos);
+
+           //Calculate the difference in position magnitude as a measure for convergence
+           convergence=Math.sqrt(Math.pow(currentPos[0], 2) + Math.pow(currentPos[1], 2) + Math.pow(currentPos[2], 2))-Math.sqrt(Math.pow(previousPos[0], 2) + Math.pow(previousPos[1], 2) + Math.pow(previousPos[2], 2));
+           //Check if midPos is greater than, less than or  equal to iso value and update accordingly
+           if(midValue == iso_value) {
+               currentPos = midPos;
+               found = true;
+           }
+           else if (midValue > iso_value) {
+               currentPos = midPos;
+           }
+           else {
+               previousPos = midPos;
+           }
+
+       } while (found && convergence > 0.001);
+
+       return currentPos;
+
    }
     
     //////////////////////////////////////////////////////////////////////
@@ -688,7 +721,7 @@ public double computeOpacity2DTF(double material_value, double material_r,
     if(voxelAngle < angle){
         //the factor between the voxel radius and the total distance of the horizontal line to the diagonal along the voxel is used as a ramp
         // opacity = ((voxelRad/voxelBaseRadius))*tFunc2D.color.a;
-        opacity = tFunc2D.color.a; 
+        opacity = tFunc2D.color.a;
     }
     return opacity;
 }  
