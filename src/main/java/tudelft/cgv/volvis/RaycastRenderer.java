@@ -245,6 +245,8 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
        // Now loop through all samples
        do{
            // Obtain the interpolation value at current position and compare it against iso_value
+           // Using Linear Interpolation because tricubic interpolation is too slow
+           // Tri cubic interpolation may be activated by un-commenting the command below
            double currentValue = volume.getVoxelLinearInterpolate(currentPosition);
            //double currentValue = volume.getVoxelTriCubicInterpolate(currentPosition);
            // Obtain the gradient at this point
@@ -270,11 +272,11 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
        if((r > 0 || g > 0 || b > 0) && alpha > 0) {
            if (shadingMode) {
                voxelColor = new TFColor(r,g,b,alpha);
-               newColor = computePhongShading(voxelColor, gradients.getGradient(currentPosition), lightVector, rayVector);
+               newColor = computePhongShading(voxelColor, gradients.getGradient(currentPosition), lightVector, rayVector, true);
                r=newColor.r;
                g=newColor.g;
                b=newColor.b;
-               alpha = 1;
+               alpha = newColor.a;
 
            }
        }
@@ -362,11 +364,12 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
             voxelColor.r = shadingColor.r;
             voxelColor.g =shadingColor.g;
             voxelColor.b =shadingColor.b;
-            voxelColor.a =shadingColor.a;
             
             if(voxelColor.r > 0 || voxelColor.g > 0 || voxelColor.b > 0) {
-                opacity = shadingColor.a;
-            }}
+                opacity =shadingColor.a; 
+            }
+            
+           }
         
         r = voxelColor.r ;
         g = voxelColor.g ;
@@ -377,7 +380,6 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         int color = computeImageColor(r,g,b,alpha);
         return color;
     }
-
     
     // Get the composite color from raycasting front to back.
     public TFColor getCompositeColor(double[] currentPos, double[] lightVector, int nrSamples, double[] rayVector){
@@ -423,8 +425,8 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
     ///////////////// FUNCTION TO BE IMPLEMENTED /////////////////////////
     ////////////////////////////////////////////////////////////////////// 
     // Compute Phong Shading given the voxel color (material color), the gradient, the light vector and view vector 
-    public TFColor computePhongShading(TFColor voxel_color, VoxelGradient gradient, double[] lightVector,
-            double[] rayVector) {
+    public TFColor computePhongShading(TFColor voxel_color, VoxelGradient gradient, double[] lightVector, 
+            double[] rayVector, boolean silhouette) {
 
         // Implementation
         // Define ambient, diffuse, and specular constants
@@ -485,12 +487,34 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         double b = ambientColor[2] + diffuseColor[2] + specularColor[2];
         if (b < 0.0) {b = 0.0;}
         if (b > 1.0) {b = 1.0;}
+        
+        // Perform silhouette rendering or not depending on the input
+        double opacity = 0;
+        if (silhouette == true){
+            // Define constants for silhouette opacity
+            double ksc = 0.9;
+            double kss = 50;
+            double kse = 0.5;
+            double n_dot_R = VectorMath.dotproduct(gradientNorm, rayVector);
+            //opacity = Math.min(voxel_color.a*(ksc + kss*Math.pow((1 - Math.abs(n_dot_R)), kse)), 1.0);
+            
+            // Define constants for gradient opacity
+            double kgc = 0.0;
+            double kgs = 0.05;
+            double kge = 1.0;
+            // Parameters for gradient opacity tuned
+            opacity = Math.min(voxel_color.a*(kgc + kgs*Math.pow(gradient.mag, kge)), 1.5);
+        }
+        
+        else if (silhouette == false){
+        opacity = voxel_color.a;
+        }
 
-        TFColor color = new TFColor(r,g,b,voxel_color.a);
+        TFColor color = new TFColor(r,g,b,opacity);
         return color;
     }
     
-private TFColor getCompositePhongShading(int nrSamples, double[] currentPos, double[] increments, double[] lightVector, double[] rayVector) {
+    private TFColor getCompositePhongShading(int nrSamples, double[] currentPos, double[] increments, double[] lightVector, double[] rayVector) {
         
         int value = (int) volume.getVoxelLinearInterpolate(currentPos);
         
@@ -500,30 +524,24 @@ private TFColor getCompositePhongShading(int nrSamples, double[] currentPos, dou
             TFColor color0 = tFunc.getColor(value);
             //TFColor color0 = getCompositeColor(currentPos, lightVector, nrSamples, rayVector);
             // Add phong shading
-            TFColor shaded =  computePhongShading(color0,gradients.getGradient(currentPos),lightVector,rayVector);
+            TFColor shaded =  computePhongShading(color0,gradients.getGradient(currentPos),lightVector,rayVector, true);
             // Add transparency
-            TFColor returnColor = getColourWithTransparency(shaded,color0.a);
+            TFColor returnColor = getColourWithTransparency(shaded, shaded.a);
             return returnColor;
         }
         else{
-            //double intensity_i = volume.getVoxelLinearInterpolate(currentPos);
             TFColor color_i = tFunc.getColor(value);
-            //TFColor color_i = getCompositeColor(currentPos, lightVector, nrSamples, rayVector);
-            if(color_i.r > 0 && color_i.a > 0){
-                int xeno = 0;
-            }
-            TFColor result_i = new TFColor(0,0,0,0);
-            TFColor shaded = computePhongShading(color_i,gradients.getGradient(currentPos),lightVector,rayVector);
+            TFColor shaded = computePhongShading(color_i,gradients.getGradient(currentPos),lightVector,rayVector, true);
 
             for (int x = 0; x < 3; x++) {
                 currentPos[x] += increments[x];
             }
             //result_i = getRGBProduct(shaded,color_i,result_i);
-            TFColor shadedTransparency = getColourWithTransparency(shaded,color_i.a);
+            TFColor shadedTransparency = getColourWithTransparency(shaded, shaded.a);
             return addColourComposite(shadedTransparency,
-                    getColourWithTransparency(getCompositePhongShading(--nrSamples,currentPos,increments,lightVector,rayVector),(1-color_i.a)));
+                    getColourWithTransparency(getCompositePhongShading(--nrSamples,currentPos,increments,
+                            lightVector,rayVector), (1 - shaded.a)));
         }
-
     }
     
       private TFColor addColourComposite(TFColor trueColor, TFColor colourWithTransparency) {
@@ -535,7 +553,7 @@ private TFColor getCompositePhongShading(int nrSamples, double[] currentPos, dou
         return  result;
     }
       
-     private TFColor getColourWithTransparency(TFColor color0,double opacity) {
+     private TFColor getColourWithTransparency(TFColor color0, double opacity) {
         TFColor result = new TFColor();
         result.r = color0.r * opacity;
         result.g = color0.g * opacity;
