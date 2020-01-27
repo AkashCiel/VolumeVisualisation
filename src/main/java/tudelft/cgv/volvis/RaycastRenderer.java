@@ -50,6 +50,7 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
     private boolean compositingMode = false;
     private boolean tf2dMode = false;
     private boolean shadingMode = false;
+    private boolean toneShadingMode = false;
     private boolean isoMode = false;
     private float iso_value=95; 
     // This is a work around
@@ -385,6 +386,10 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
             currColor = computePhongShading(currColor, this.gradients.getGradient(currentPos), lightVector, rayVector);
         }
         
+        if(toneShadingMode) {
+            currColor = computeToneShading(currColor, this.gradients.getGradient(currentPos), lightVector, rayVector);
+        }
+        
         // Go to the next position.
         for (int i = 0; i < 3; i++) {
             currentPos[i] += lightVector[i];
@@ -442,7 +447,57 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         newColor.a = currentOpacity + (1 - currentOpacity) * previousColor.a;
         
         return newColor;
+    }
+    
+    // Method to apply tone shading.
+    public TFColor computeToneShading(TFColor voxel_color, VoxelGradient gradient, double[] lightVector,
+            double[] rayVector) {
+        // define cool and warm colors.
+        TFColor cool = new TFColor(0.4, 0.0, 1.0, 1.0);
+        TFColor warm = new TFColor(1.0, 1.0, 0.0, 1.0);
         
+        // weight of TF color compared to tone.
+        double weight = 0.1;
+        
+        // Normalise Gradient Vector
+        double gradientNorm[] = new double[3];
+        if (gradient.mag != 0){
+            VectorMath.setVector(gradientNorm, gradient.x/gradient.mag, gradient.y/gradient.mag, gradient.z/gradient.mag);
+        } else{
+            return voxel_color;
+        }
+        
+        // Normalise Gradient Vector
+        double lightNorm[] = new double[3];
+        if (VectorMath.length(lightVector) != 0){
+            VectorMath.setVector(lightNorm, lightVector[0]/VectorMath.length(lightVector), lightVector[1]/VectorMath.length(lightVector), lightVector[2]/VectorMath.length(lightVector));
+        } else {
+            return voxel_color;
+        }
+
+        // Calculate cos theta using gradient (normal) vector
+        double cosTheta = VectorMath.dotproduct(lightNorm, gradientNorm);
+        
+        double coolColor[] = new double[3];
+        double warmColor[] = new double[3];
+        
+        // Compute the combined color.
+        VectorMath.setVector(coolColor, cool.r + weight * voxel_color.r, 
+                cool.g + weight * voxel_color.g, cool.b + weight * voxel_color.b);
+        VectorMath.setVector(warmColor, warm.r + weight * voxel_color.r, 
+                warm.g + weight * voxel_color.g, warm.b + weight * voxel_color.b);
+        
+        // Define the cool to warm ratio.
+        double coolComp = (1 + cosTheta) / 2;
+        double warmComp = 1 - ((1 + cosTheta) / 2);
+        
+        // Apply the ratio to the warm and cool components.
+        double r = coolComp * coolColor[0] + warmComp * warmColor[0];
+        double g = coolComp * coolColor[1] + warmComp * warmColor[1];
+        double b = coolComp * coolColor[2] + warmComp * warmColor[2];
+        
+        TFColor color = new TFColor(r,g,b,voxel_color.a);
+        return color;
     }
     
     //////////////////////////////////////////////////////////////////////
@@ -459,17 +514,13 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         double ks = 0.2;
         double alpha = 100.0;
 
-        double gradientNorm[] = new double[3];
         // Normalise Gradient Vector
-//        if (gradient.mag == 0){return voxel_color;}
-//        double[] gradientNorm = {gradient.x/gradient.mag, gradient.y/gradient.mag, gradient.z/gradient.mag};
+        double gradientNorm[] = new double[3];
         if (gradient.mag != 0){
             VectorMath.setVector(gradientNorm, gradient.x/gradient.mag, gradient.y/gradient.mag, gradient.z/gradient.mag);
-        }else{
-            //VectorMath.setVector(gradientNorm, gradient.x, gradient.y, gradient.z);
+        } else{
             return voxel_color;
         }
-
 
         // Calculate cos theta using gradient (normal) vector
         double cosTheta = VectorMath.dotproduct(lightVector, gradientNorm);
@@ -790,6 +841,11 @@ public double computeOpacity2DTF(double material_value, double material_r,
     //Do NOT modify this function
     public void setShadingMode(boolean mode) {
         shadingMode = mode;
+        changed();
+    }
+    //Do NOT modify this function
+    public void setToneShadingMode(boolean mode) {
+        toneShadingMode = mode;
         changed();
     }
     //Do NOT modify this function

@@ -40,7 +40,11 @@
                           <Component id="tf2dButton" alignment="0" min="-2" max="-2" attributes="0"/>
                           <Component id="mipButton" alignment="0" min="-2" max="-2" attributes="0"/>
                           <Component id="slicerButton" alignment="0" min="-2" max="-2" attributes="0"/>
-                          <Component id="shadingCheckbox" alignment="0" min="-2" max="-2" attributes="0"/>
+                          <Group type="102" alignment="0" attributes="0">
+                              <Component id="shadingCheckbox" min="-2" max="-2" attributes="0"/>
+                              <EmptySpace type="separate" max="-2" attributes="0"/>
+                              <Component id="shadingCheckbox1" min="-2" max="-2" attributes="0"/>
+                          </Group>
                           <Group type="102" alignment="0" attributes="0">
                               <Component id="IsoSurface" min="-2" max="-2" attributes="0"/>
                               <EmptySpace max="-2" attributes="0"/>
@@ -86,7 +90,10 @@
               <EmptySpace max="-2" attributes="0"/>
               <Component id="tf2dButton" min="-2" max="-2" attributes="0"/>
               <EmptySpace min="-2" pref="27" max="-2" attributes="0"/>
-              <Component id="shadingCheckbox" min="-2" max="-2" attributes="0"/>
+              <Group type="103" groupAlignment="3" attributes="0">
+                  <Component id="shadingCheckbox" alignment="3" min="-2" max="-2" attributes="0"/>
+                  <Component id="shadingCheckbox1" alignment="3" min="-2" max="-2" attributes="0"/>
+              </Group>
               <EmptySpace min="-2" pref="18" max="-2" attributes="0"/>
               <Group type="103" groupAlignment="0" attributes="0">
                   <Component id="Resolution" min="-2" max="-2" attributes="0"/>
@@ -218,6 +225,14 @@
       <Properties>
         <Property name="text" type="java.lang.String" value="Color"/>
       </Properties>
+    </Component>
+    <Component class="javax.swing.JCheckBox" name="shadingCheckbox1">
+      <Properties>
+        <Property name="text" type="java.lang.String" value="Tone shading"/>
+      </Properties>
+      <Events>
+        <EventHandler event="actionPerformed" listener="java.awt.event.ActionListener" parameters="java.awt.event.ActionEvent" handler="shadingCheckbox1ActionPerformed"/>
+      </Events>
     </Component>
   </SubComponents>
 </Form>
