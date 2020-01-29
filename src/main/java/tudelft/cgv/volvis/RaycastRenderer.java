@@ -476,6 +476,7 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         // Add shading if necessary
         if (shadingMode) {
             currColor = computePhongShading(currColor, gradients.getGradient(currentPos), lightVector, rayVector, "Default");
+            // Implementing slightly tuned versions of improved opacity computation to render finer details
             if (shadingType == "Default"){
                 currentOpacity = Math.min(this.computeOpacity2DTF(tFunc2D.baseIntensity, tFunc2D.radius, value, 
                     shadingType, rayVector, currentGradient)*currColor.a, 1.5);
@@ -572,7 +573,7 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         if (gradient.mag != 0){
             VectorMath.setVector(gradientNorm, gradient.x/gradient.mag, gradient.y/gradient.mag, gradient.z/gradient.mag);
         }
-        // 
+        // Return voxel color is no gradient at current position
         else{
             return voxel_color;
         }
@@ -590,7 +591,8 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
                 scaledNormalVec[2]-lightVector[2]};
         // Dot product of resultant and ray vector gives cos phi
         double cosPhi = VectorMath.dotproduct(rayVector, vectorSubstraction);
-
+        
+        // Compute ambient, diffused, and specular color components
         double ciAmbient[] = new double[3];
         VectorMath.setVector(ciAmbient, voxel_color.r,voxel_color.g,voxel_color.b);
 
@@ -607,7 +609,8 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         for(int i= 0;i<3;i++){ambientColor[i] = Math.max(0,ka*ciAmbient[i]);}
         for(int i= 0;i<3;i++){diffuseColor[i] = Math.max(0,kd*cosTheta*ciDiffused[i]);}
         for(int i= 0;i<3;i++){specularColor[i] = Math.max(0,ks*Math.pow(cosPhi, alpha)*ciSpecular[i]);}
-
+        
+        // Compose final color by combining all color components
         double r = ambientColor[0] + diffuseColor[0] + specularColor[0];
         if (r < 0.0) {r = 0.0;}
         if (r > 1.0) {r = 1.0;}
@@ -618,6 +621,7 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         if (b < 0.0) {b = 0.0;}
         if (b > 1.0) {b = 1.0;}
         
+        // Compute improved opacity based on the user input
         double opacity = improveOpacity(voxel_color.a, gradient, rayVector, shadingType);
         TFColor color = new TFColor(r,g,b,opacity);
         return color;
@@ -639,6 +643,7 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
             double kss = 50;
             double kse = 0.6;
             double n_dot_R = VectorMath.dotproduct(gradientNorm, rayVector);
+            // Calculate improved opacity
             improvedOpacity = Math.min(currentOpacity*(ksc + kss*Math.pow((1 - Math.abs(n_dot_R)), kse)), 1.2);
         }
         
@@ -652,6 +657,7 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         }
         
         else if (shadingType == "Default"){
+        // Return current opacity value if default option selected
         improvedOpacity = currentOpacity;
         }
     
