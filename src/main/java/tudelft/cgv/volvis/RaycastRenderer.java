@@ -256,7 +256,7 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
            if (currentValue > iso_value)
            {
                // Use bisection accuracy to fine tune current position
-               bisection_accuracy(currentPosition, increments, sampleStep, currentValue, iso_value);
+               currentPosition = bisection_accuracy(currentPosition, increments, sampleStep, currentValue, iso_value);
                r = isoColor.r; g = isoColor.g; b = isoColor.b; alpha = 1.0;
                break;
            }
@@ -297,7 +297,7 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
     // Given the current sample position, increment vector of the sample (vector from previous sample to current sample) and sample Step. 
    // Previous sample value and current sample value, isovalue value
     // The function should search for a position where the iso_value passes that it is more precise.
-   public void  bisection_accuracy (double[] currentPos, double[] increments,double sampleStep, double value, double iso_value)
+   public double[]  bisection_accuracy (double[] currentPos, double[] increments,double sampleStep, double value, double iso_value)
    {
        //Middle value for each iteration
        float midValue;
@@ -330,7 +330,10 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
                previousPos = midPos;
            }
 
-       } while (found && convergence > 0.001); }
+       } while (found && convergence > 0.001); 
+       
+       return currentPos;
+   }
     
     //////////////////////////////////////////////////////////////////////
     ///////////////// FUNCTION TO BE IMPLEMENTED /////////////////////////
@@ -416,18 +419,18 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
             return currColor;
         }
         
-        if(shadingMode) {
+        if(toneShadingMode) {
+            // Re-compute currColor to avoid pass by reference from other modules
+            currColor = this.tFunc.getColor(value);
+            currColor = computeToneShading(currColor, this.gradients.getGradient(currentPos), lightVector, rayVector);
+        } else if (shadingMode) {
             // Re-compute currColor to avoid pass by reference from other modules
             currColor = this.tFunc.getColor(value);
             currColor = computePhongShading(currColor, this.gradients.getGradient(currentPos), 
                     lightVector, rayVector, shadingType);
             currentOpacity = currColor.a;
         }
-        if(toneShadingMode) {
-            // Re-compute currColor to avoid pass by reference from other modules
-            currColor = this.tFunc.getColor(value);
-            currColor = computeToneShading(currColor, this.gradients.getGradient(currentPos), lightVector, rayVector);
-        }
+        
         
         // Go to the next position.
         for (int i = 0; i < 3; i++) {
