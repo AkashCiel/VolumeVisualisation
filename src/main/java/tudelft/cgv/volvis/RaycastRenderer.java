@@ -372,7 +372,8 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
  
         if (compositingMode) {
             // 1D transfer function 
-            compositeColor = getCompositeColor(currentPos, lightVector, nrSamples, rayVector);}
+            compositeColor = getCompositeColor(currentPos, lightVector, nrSamples, rayVector);
+        }
                     
         if (tf2dMode) {
             compositeColor = getCompositeColor2D(currentPos, lightVector, nrSamples, rayVector);
@@ -386,7 +387,7 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         if(voxelColor.r > 0 || voxelColor.g > 0 || voxelColor.b > 0) {
             opacity = compositeColor.a;
         }
-            
+        
         r = voxelColor.r ;
         g = voxelColor.g ;
         b = voxelColor.b;
@@ -396,6 +397,7 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         int color = computeImageColor(r,g,b,alpha);
         return color;
     }
+
     
     // Get the composite color from raycasting front to back.
     // Get the composite color from raycasting front to back.
@@ -648,24 +650,21 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
             double n_dot_R = VectorMath.dotproduct(gradientNorm, rayVector);
             // Calculate improved opacity
             improvedOpacity = Math.min(currentOpacity*(ksc + kss*Math.pow((1 - Math.abs(n_dot_R)), kse)), 1.2);
-        }
-        
-        else if (shadingType == "Boundary"){
+        } else if (shadingType == "Boundary"){
             // Define constants for gradient opacity
             double kgc = 0.0;
             double kgs = 0.05;
             double kge = 1.2;
             // Parameters for gradient opacity tuned
             improvedOpacity = Math.min(currentOpacity*(kgc + kgs*Math.pow(gradient.mag, kge)), 1.5);
+        } else if (shadingType == "Default"){
+          // Return current opacity value if default option selected
+          improvedOpacity = currentOpacity;
         }
-        
-        else if (shadingType == "Default"){
-        // Return current opacity value if default option selected
-        improvedOpacity = currentOpacity;
-        }
-    
+      
         return improvedOpacity;
     }
+
     //////////////////////////////////////////////////////////////////////
     ///////////////// LIMITED MODIFICATION IS NEEDED /////////////////////
     ////////////////////////////////////////////////////////////////////// 
