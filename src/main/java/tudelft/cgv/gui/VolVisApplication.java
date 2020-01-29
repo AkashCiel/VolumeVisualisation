@@ -143,7 +143,7 @@ public class VolVisApplication extends javax.swing.JFrame {
     private void loadButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_loadButtonActionPerformed
         // TODO add your handling code here:
         String currentDir = System.getProperty("user.dir");
-        String dataDir = currentDir + "\\..\\set1_data\\";
+        String dataDir = currentDir + "\\..\\Datasets\\";
         JFileChooser fc = new JFileChooser(dataDir);
         fc.setFileFilter(new FileFilter() {
 
