@@ -50,13 +50,14 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
     private boolean compositingMode = false;
     private boolean tf2dMode = false;
     private boolean shadingMode = false;
+    private String shadingType = "Default";
     private boolean toneShadingMode = false;
     private boolean isoMode = false;
     private float iso_value=95; 
     // This is a work around
     private float res_factor = 1.0f;
     private float max_res_factor=0.25f;
-    private TFColor isoColor;
+    private TFColor isoColor; 
 
     
     //////////////////////////////////////////////////////////////////////
@@ -246,19 +247,21 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
        // Now loop through all samples
        do{
            // Obtain the interpolation value at current position and compare it against iso_value
+           // Using Linear Interpolation because tricubic interpolation is too slow
+           // Tri cubic interpolation may be activated by un-commenting the command below
            double currentValue = volume.getVoxelLinearInterpolate(currentPosition);
            //double currentValue = volume.getVoxelTriCubicInterpolate(currentPosition);
-           // Obtain the gradient at this point
-
 
            // Edit color values if currentValue is greater than iso_value
            if (currentValue > iso_value)
            {
-
+               // Use bisection accuracy to fine tune current position
+               bisection_accuracy(currentPosition, increments, sampleStep, currentValue, iso_value);
                r = isoColor.r; g = isoColor.g; b = isoColor.b; alpha = 1.0;
                break;
            }
-           // Increment position and decrement available samples
+        
+        // Increment current position and decrement available samples
            for (int i = 0; i < 3; i++)
            {
                currentPosition[i] += increments[i];
@@ -271,11 +274,11 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
        if((r > 0 || g > 0 || b > 0) && alpha > 0) {
            if (shadingMode) {
                voxelColor = new TFColor(r,g,b,alpha);
-               newColor = computePhongShading(voxelColor, gradients.getGradient(currentPosition), lightVector, rayVector);
+               newColor = computePhongShading(voxelColor, gradients.getGradient(currentPosition), lightVector, rayVector, "Default");
                r=newColor.r;
                g=newColor.g;
                b=newColor.b;
-               alpha = 1;
+               alpha = newColor.a;
 
            }
        }
@@ -294,7 +297,7 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
     // Given the current sample position, increment vector of the sample (vector from previous sample to current sample) and sample Step. 
    // Previous sample value and current sample value, isovalue value
     // The function should search for a position where the iso_value passes that it is more precise.
-   public double[]  bisection_accuracy (double[] currentPos, double[] increments,double sampleStep, float previousvalue,float value, float iso_value)
+   public void  bisection_accuracy (double[] currentPos, double[] increments,double sampleStep, double value, double iso_value)
    {
        //Middle value for each iteration
        float midValue;
@@ -327,11 +330,7 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
                previousPos = midPos;
            }
 
-       } while (found && convergence > 0.001);
-
-       return currentPos;
-
-   }
+       } while (found && convergence > 0.001); }
     
     //////////////////////////////////////////////////////////////////////
     ///////////////// FUNCTION TO BE IMPLEMENTED /////////////////////////
@@ -347,9 +346,13 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         //the light vector is directed toward the view point (which is the source of the light)
         // another light vector would be possible 
         VectorMath.setVector(lightVector, rayVector[0], rayVector[1], rayVector[2]);
-
+        
         // Compute the number of times we need to sample
         int nrSamples = 1 + (int) Math.floor(VectorMath.distance(entryPoint, exitPoint) / sampleStep);
+        
+        // Define increments
+        double[] increments = new double[3];
+        VectorMath.setVector(increments, rayVector[0] * sampleStep, rayVector[1] * sampleStep, rayVector[2] * sampleStep);
         
         //the current position is initialized as the entry point
         double[] currentPos = new double[3];
@@ -362,14 +365,12 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         double opacity = 0;
         
         TFColor voxelColor = new TFColor();
-        TFColor compositeColor = new TFColor();;
-        
-        // 1D transfer function 
+        TFColor compositeColor = new TFColor();
+ 
         if (compositingMode) {
-            compositeColor = getCompositeColor(currentPos, lightVector, nrSamples, rayVector);
-        }    
-
-        // 2D transfer function
+            // 1D transfer function 
+            compositeColor = getCompositeColor(currentPos, lightVector, nrSamples, rayVector);}
+                    
         if (tf2dMode) {
             compositeColor = getCompositeColor2D(currentPos, lightVector, nrSamples, rayVector);
         }
@@ -378,7 +379,6 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         voxelColor.r = compositeColor.r;
         voxelColor.g = compositeColor.g;
         voxelColor.b = compositeColor.b;
-
         // only give opacity if it has some color.
         if(voxelColor.r > 0 || voxelColor.g > 0 || voxelColor.b > 0) {
             opacity = compositeColor.a;
@@ -388,12 +388,13 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         g = voxelColor.g ;
         b = voxelColor.b;
         alpha = opacity ;
-
+            
         //computes the color
         int color = computeImageColor(r,g,b,alpha);
         return color;
     }
     
+    // Get the composite color from raycasting front to back.
     // Get the composite color from raycasting front to back.
     public TFColor getCompositeColor(double[] currentPos, double[] lightVector, int nrSamples, double[] rayVector){
 
@@ -404,7 +405,7 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         double currentOpacity = currColor.a;
         
         // set an opacity threshold when computation can stop.
-        double opacity_threshold = 0.99;
+        double opacity_threshold = 1.5;
         
         // End the ray when opacity is too high.
         // Get just this sample's color value * opacity.
@@ -416,10 +417,15 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         }
         
         if(shadingMode) {
-            currColor = computePhongShading(currColor, this.gradients.getGradient(currentPos), lightVector, rayVector);
+            // Re-compute currColor to avoid pass by reference from other modules
+            currColor = this.tFunc.getColor(value);
+            currColor = computePhongShading(currColor, this.gradients.getGradient(currentPos), 
+                    lightVector, rayVector, shadingType);
+            currentOpacity = currColor.a;
         }
-        
         if(toneShadingMode) {
+            // Re-compute currColor to avoid pass by reference from other modules
+            currColor = this.tFunc.getColor(value);
             currColor = computeToneShading(currColor, this.gradients.getGradient(currentPos), lightVector, rayVector);
         }
         
@@ -449,9 +455,10 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
             return new TFColor(0,0,0,0);
         }
         
-        // Voxel value and gradient magnitude for 2D transfer function
+        // Voxel value, gradient, and gradient magnitude for 2D transfer function
         int value = (int) volume.getVoxelLinearInterpolate(currentPos);
-        double mag = gradients.getGradient(currentPos).mag;
+        VoxelGradient currentGradient = gradients.getGradient(currentPos);
+        double mag = currentGradient.mag;
 
         // Go to the next position.
         for (int i = 0; i < 3; i++) {
@@ -461,13 +468,26 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         
         // Use color from tFund2D widget and opacity from computeOpacity2D
         TFColor currColor = this.tFunc2D.color;
-        double currentOpacity = this.computeOpacity2DTF(tFunc2D.baseIntensity, tFunc2D.radius, value, mag)*currColor.a;
+        double currentOpacity = this.computeOpacity2DTF(tFunc2D.baseIntensity, tFunc2D.radius, 
+                value, "Default", rayVector, currentGradient)*currColor.a;
         // Get the accumulated color of the sample before.
         TFColor previousColor = getCompositeColor2D(currentPos, lightVector, nrSamples, rayVector);
            
         // Add shading if necessary
         if (shadingMode) {
-            currColor = computePhongShading(currColor, gradients.getGradient(currentPos), lightVector, rayVector);
+            currColor = computePhongShading(currColor, gradients.getGradient(currentPos), lightVector, rayVector, "Default");
+            if (shadingType == "Default"){
+                currentOpacity = Math.min(this.computeOpacity2DTF(tFunc2D.baseIntensity, tFunc2D.radius, value, 
+                    shadingType, rayVector, currentGradient)*currColor.a, 1.5);
+            }
+            else if (shadingType == "Surface"){
+                currentOpacity = Math.min(this.computeOpacity2DTF(tFunc2D.baseIntensity, tFunc2D.radius, value, 
+                    shadingType, rayVector, currentGradient)*currColor.a, 0.3);
+            }
+            else if (shadingType == "Boundary"){
+                currentOpacity = Math.min(this.computeOpacity2DTF(tFunc2D.baseIntensity, tFunc2D.radius, value, 
+                    shadingType, rayVector, currentGradient)*currColor.a, 0.3);
+            }
         }
         
         // Update the color with behind sample's color.
@@ -537,8 +557,8 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
     ///////////////// FUNCTION TO BE IMPLEMENTED /////////////////////////
     ////////////////////////////////////////////////////////////////////// 
     // Compute Phong Shading given the voxel color (material color), the gradient, the light vector and view vector 
-    public TFColor computePhongShading(TFColor voxel_color, VoxelGradient gradient, double[] lightVector,
-            double[] rayVector) {
+    public TFColor computePhongShading(TFColor voxel_color, VoxelGradient gradient, double[] lightVector, 
+            double[] rayVector, String shadingType) {
 
         // Implementation
         // Define ambient, diffuse, and specular constants
@@ -547,11 +567,13 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         double ks = 0.2;
         double alpha = 100.0;
 
-        // Normalise Gradient Vector
         double gradientNorm[] = new double[3];
+        // Normalise Gradient Vector
         if (gradient.mag != 0){
             VectorMath.setVector(gradientNorm, gradient.x/gradient.mag, gradient.y/gradient.mag, gradient.z/gradient.mag);
-        } else{
+        }
+        // 
+        else{
             return voxel_color;
         }
 
@@ -595,12 +617,46 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
         double b = ambientColor[2] + diffuseColor[2] + specularColor[2];
         if (b < 0.0) {b = 0.0;}
         if (b > 1.0) {b = 1.0;}
-
-        TFColor color = new TFColor(r,g,b,voxel_color.a);
+        
+        double opacity = improveOpacity(voxel_color.a, gradient, rayVector, shadingType);
+        TFColor color = new TFColor(r,g,b,opacity);
         return color;
     }
+
+    public double improveOpacity(double currentOpacity, VoxelGradient gradient, double[] rayVector, String shadingType)
+    {
+        double gradientNorm[] = new double[3];
+        if (gradient.mag != 0){
+            VectorMath.setVector(gradientNorm, gradient.x/gradient.mag, gradient.y/gradient.mag, gradient.z/gradient.mag);
+        } else{
+            return currentOpacity;
+        }
+        // Perform silhouette rendering or not depending on the input
+        double improvedOpacity = 0.0;
+        if (shadingType == "Surface"){
+            // Define constants for silhouette opacity
+            double ksc = 0.0;
+            double kss = 50;
+            double kse = 0.6;
+            double n_dot_R = VectorMath.dotproduct(gradientNorm, rayVector);
+            improvedOpacity = Math.min(currentOpacity*(ksc + kss*Math.pow((1 - Math.abs(n_dot_R)), kse)), 1.2);
+        }
+        
+        else if (shadingType == "Boundary"){
+            // Define constants for gradient opacity
+            double kgc = 0.0;
+            double kgs = 0.05;
+            double kge = 1.2;
+            // Parameters for gradient opacity tuned
+            improvedOpacity = Math.min(currentOpacity*(kgc + kgs*Math.pow(gradient.mag, kge)), 1.5);
+        }
+        
+        else if (shadingType == "Default"){
+        improvedOpacity = currentOpacity;
+        }
     
-    
+        return improvedOpacity;
+    }
     //////////////////////////////////////////////////////////////////////
     ///////////////// LIMITED MODIFICATION IS NEEDED /////////////////////
     ////////////////////////////////////////////////////////////////////// 
@@ -701,7 +757,7 @@ public class RaycastRenderer extends Renderer implements TFChangeListener {
 // tFunc2D.baseIntensity, tFunc2D.radius they are in image intensity units
 
 public double computeOpacity2DTF(double material_value, double material_r,
-        double voxelValue, double gradMagnitude) {
+        double voxelValue, String shadingType, double [] rayVector, VoxelGradient gradient) {
 
     //init opacity with 0
     double opacity = 0.0;
@@ -710,20 +766,23 @@ public double computeOpacity2DTF(double material_value, double material_r,
     double maxmag = this.gradients.getMaxGradientMagnitude();
     //angle of the widget
     double angle = Math.atan(material_r/maxmag);
-
+    
+    // Compute gradient magnitude
+    double gradMagnitude = gradient.mag;
     //angle of current voxel with respect to base intensity center
     double voxelRad = Math.abs(voxelValue-material_value);
     double voxelAngle = Math.atan(voxelRad/gradMagnitude);
     
-    //double voxelBaseRadius = (gradMagnitude/maxmag)*material_r*0.5;
+    double voxelBaseRadius = (gradMagnitude/maxmag)*material_r*0.5;
 
     //if the voxel is inside the widget, give it an opacity
     if(voxelAngle < angle){
         //the factor between the voxel radius and the total distance of the horizontal line to the diagonal along the voxel is used as a ramp
-        // opacity = ((voxelRad/voxelBaseRadius))*tFunc2D.color.a;
         opacity = tFunc2D.color.a;
-    }
-    return opacity;
+        //opacity = (voxelRad/voxelBaseRadius)*tFunc2D.color.a;
+    }   
+    double improvedOpacity = improveOpacity(opacity, gradient, rayVector, shadingType);
+    return improvedOpacity;
 }  
 
   //////////////////////////////////////////////////////////////////////
@@ -843,8 +902,6 @@ public double computeOpacity2DTF(double material_value, double material_r,
         }
         
         image = new BufferedImage(imageSize, imageSize, BufferedImage.TYPE_INT_ARGB);
-      
-                  
            
         // Initialize transferfunction 
         tFunc = new TransferFunction(volume.getMinimum(), volume.getMaximum());
@@ -872,15 +929,21 @@ public double computeOpacity2DTF(double material_value, double material_r,
         return tfEditor;
     }
     //Do NOT modify this function
-    public void setShadingMode(boolean mode) {
-        shadingMode = mode;
+    public void setShadingMode(boolean mode, String inputShadingType) {
+        setTotalShadingMode(mode, !mode, inputShadingType);
+    }
+    
+    public void setToneShadingMode(boolean mode, String inputShadingType) {
+        setTotalShadingMode(!mode, mode, inputShadingType);
+    }
+    
+    public void setTotalShadingMode(boolean volumeMode, boolean toneMode, String inputShadingType){
+        shadingMode = volumeMode;
+        shadingType = inputShadingType;
+        toneShadingMode = toneMode;
         changed();
     }
-    //Do NOT modify this function
-    public void setToneShadingMode(boolean mode) {
-        toneShadingMode = mode;
-        changed();
-    }
+
     //Do NOT modify this function
     public void setMIPMode() {
         setMode(false, true, false, false,false);
